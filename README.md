@@ -50,3 +50,9 @@ We hypothesize that implementing a web-based temperature control system will all
    ```bash
    git clone https://github.com/jonontop/Thermostat.git
    cd Thermostat
+   ```
+2. Install required libraries in Arduino IDE:
+
+- Open Arduino IDE.
+- Go to Sketch > Include Library > Manage Libraries.
+- Search for and install DHT sensor library and ESPAsyncWebServer.
