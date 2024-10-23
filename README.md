@@ -90,9 +90,3 @@ The main components of the code include:
 - GET /setThreshold
   - Updates the temperature threshold. Requires a value parameter.
  
-## Contributing
-Contributions are welcome! If you have suggestions for improvements, please create an issue or submit a pull request.
-
-## License
-This project is licensed under the MIT License. See the [LICENSE]() file for details.
-  
