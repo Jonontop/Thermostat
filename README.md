@@ -28,11 +28,13 @@ We hypothesize that implementing a web-based temperature control system will all
 
 ## Hardware Requirements
 
-- ESP32 microcontroller
-- DHT22 temperature and humidity sensor
-- Relay module
+- ESP32 microcontroller (only becouse of wifi, feel free to use any by your choise) 2x
+- DHT22/11 temperature and humidity sensor
+- Relay module (1 phase, more if needed)
 - Breadboard and jumper wires
 - Power supply for ESP32
+- Display 2x
+- Buttons 4x
 
 ## Software Requirements
 
