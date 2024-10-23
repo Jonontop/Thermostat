@@ -62,3 +62,24 @@ We hypothesize that implementing a web-based temperature control system will all
    const char* ssid = "YOUR_SSID";
    const char* password = "YOUR_PASSWORD";
    ```
+
+4. Upload the code:
+- Connect your ESP32 to the computer via USB.
+- Select the appropriate board and port in the Arduino IDE.
+- Upload the code.
+
+## Code Overview
+The main components of the code include:
+- DHT Sensor Initialization:
+  ```cpp
+  DHT dht(DHTPIN, DHTTYPE);
+  ```
+- Web Server Setup:
+  ```cpp
+  AsyncWebServer webServer(80);
+  AsyncWebServer apiServer(81);
+  ```
+
+- Relay Control Logic: Uses digital pins to activate or deactivate the relay based on temperature readings.
+
+## API Endpoints
