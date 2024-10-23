@@ -48,5 +48,5 @@ We hypothesize that implementing a web-based temperature control system will all
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/your-repo-name.git
-   cd your-repo-name
+   git clone https://github.com/jonontop/Thermostat.git
+   cd Thermostat
