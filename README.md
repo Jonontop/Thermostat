@@ -56,3 +56,9 @@ We hypothesize that implementing a web-based temperature control system will all
 - Open Arduino IDE.
 - Go to Sketch > Include Library > Manage Libraries.
 - Search for and install DHT sensor library and ESPAsyncWebServer.
+
+3. Configure WiFi credentials: Edit the code in main.ino to add your WiFi credentials:
+   ```cpp
+   const char* ssid = "YOUR_SSID";
+   const char* password = "YOUR_PASSWORD";
+   ```
