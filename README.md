@@ -1,4 +1,4 @@
-# Temperature Control System with ESP32
+# Temperature Control System with ESP32 and remote fhisical remote
 
 This project is a temperature control system utilizing the ESP32 microcontroller, DHT22 sensor, and a relay module. It enables users to monitor and control temperature through a web interface and API. The system can automatically adjust the relay state based on temperature readings, providing efficient climate control for various applications.
 
