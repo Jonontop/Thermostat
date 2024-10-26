@@ -1,19 +1,20 @@
+#include <Wire.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 
-// DHT22
+// DHT11
 #define DHTPIN 15
-#define DHTTYPE DHT22
+#define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 // Rele
 #define RELAY_PIN 5
 
 // WiFi podatki
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid = "T-2_e8d3c9";
+const char* password = "INNBOX3348309800939";
 
 // Spletni strežnik
 AsyncWebServer server(80);
@@ -21,6 +22,16 @@ AsyncWebServer server(80);
 float temperature = 0.0;
 float thresholdTemperature = 22.0; // Temperaturni prag za vklop releja
 bool relayState = false;
+
+// GPIO for buttons
+#define INCREASE_BUTTON_PIN 18
+#define DECREASE_BUTTON_PIN 19
+int buttonState_increase = 0;
+int buttonState_decrease = 0;
+
+// For debouncing
+unsigned long lastPressTime = 0;
+const unsigned long debounceDelay = 300; // 300ms debounce delay
 
 void setup() {
   Serial.begin(115200);
@@ -33,14 +44,18 @@ void setup() {
   }
   Serial.println("WiFi povezan");
 
-  // Inicializacija DHT22 in releja
+  // Inicializacija DHT11 in releja
   dht.begin();
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
 
-// Nastavitev spletne strani
+  // Setup for buttons
+  pinMode(INCREASE_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(DECREASE_BUTTON_PIN, INPUT_PULLUP); 
+
+  // Nastavitev spletne strani
 server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><body><h1>Termostat</h1>";
+    String html = "<html><head><meta charset='UTF-8'></head><body><h1>Termostat</h1>";
     html += "<p class=\"temperature\">Trenutna temperatura: " + String(temperature) + " °C</p>";
     html += "<p class=\"threshold\">Trenutni prag za rele: " + String(thresholdTemperature) + " °C</p>";
     html += "<p class=\"relayStatus\">Rele je " + String(relayState ? "Vklopljen" : "Izklopljen") + "</p>";
@@ -57,7 +72,6 @@ server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     html += "</body></html>";
     request->send(200, "text/html", html);
 });
-
 
   // Vklop releja
   server.on("/relay/on", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -82,6 +96,7 @@ server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", "OK");
   });
 
+
   server.begin();
 }
 
@@ -102,6 +117,22 @@ void loop() {
     relayState = false;
     digitalWrite(RELAY_PIN, LOW);
   }
+  // Read the state of the button
+  buttonState_increase = digitalRead(INCREASE_BUTTON_PIN);
+  buttonState_decrease = digitalRead(DECREASE_BUTTON_PIN);
 
-  delay(2000); // Osveževanje vsake 2 sekundi
+
+  // Check if the button is pressed
+  if (buttonState_increase == LOW) {
+    Serial.println("Button1 is pressed");
+    thresholdTemperature += 1.0;
+  } 
+  
+  if (buttonState_decrease == LOW) {
+    Serial.println("Button2 is pressed");
+    thresholdTemperature -= 1.0;
+  } 
+
+
+  delay(500); // Osveževanje vsake 0.5 sekunde
 }
