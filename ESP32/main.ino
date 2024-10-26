@@ -3,6 +3,17 @@
 #include <ESPAsyncWebServer.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+
+
+// DHT11 - 15
+// RELAY - 5
+// BUTTON1 - 18
+// BUTTON2 - 19
+
+
 
 // DHT11
 #define DHTPIN 15
@@ -29,6 +40,13 @@ bool relayState = false;
 int buttonState_increase = 0;
 int buttonState_decrease = 0;
 
+// Display define
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+// Create an instance of the SSD1306 display
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
 // For debouncing
 unsigned long lastPressTime = 0;
 const unsigned long debounceDelay = 300; // 300ms debounce delay
@@ -52,6 +70,17 @@ void setup() {
   // Setup for buttons
   pinMode(INCREASE_BUTTON_PIN, INPUT_PULLUP);
   pinMode(DECREASE_BUTTON_PIN, INPUT_PULLUP); 
+
+
+  // Initialize OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);
+  }
+  
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
 
   // Nastavitev spletne strani
 server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -104,9 +133,9 @@ void loop() {
   // Branje temperature
   temperature = dht.readTemperature();
   if (isnan(temperature)) {
-    Serial.println("Napaka pri branju temperature!");
+    //Serial.println("Napaka pri branju temperature!");
   } else {
-    Serial.println("Temperatura: " + String(temperature));
+    //Serial.println("Temperatura: " + String(temperature));
   }
 
   // Kontrola releja glede na prag
@@ -124,14 +153,34 @@ void loop() {
 
   // Check if the button is pressed
   if (buttonState_increase == LOW) {
-    Serial.println("Button1 is pressed");
+    //Serial.println("Button1 is pressed");
     thresholdTemperature += 1.0;
   } 
   
   if (buttonState_decrease == LOW) {
-    Serial.println("Button2 is pressed");
+    //Serial.println("Button2 is pressed");
     thresholdTemperature -= 1.0;
   } 
+
+   // Update OLED display
+  display.clearDisplay();
+  
+  // Display current temperature
+  display.setCursor(0, 0);
+  display.println("Current Temp:");
+  display.setCursor(0, 10);
+  display.print(temperature);
+  display.println(" C");
+  
+  // Display threshold temperature
+  display.setCursor(0, 30);
+  display.println("Threshold Temp:");
+  display.setCursor(0, 40);
+  display.print(thresholdTemperature);
+  display.println(" C");
+
+  // Update the OLED display
+  display.display();
 
 
   delay(500); // Osveževanje vsake 0.5 sekunde
