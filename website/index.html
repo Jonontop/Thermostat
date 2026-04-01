@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thermostat — Home</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Bootstrap 5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <!-- Tailwind CDN (Play) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- Chart.js date adapter -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+  <style>
+    /* ── CSS Variables ────────────────────────────────── */
+    :root {
+      --bg:        #f8f9fa;
+      --surface:   #ffffff;
+      --surface2:  #f1f3f4;
+      --border:    #e0e0e0;
+      --text:      #202124;
+      --text-sub:  #5f6368;
+      --accent:    #1a73e8;
+      --accent-bg: #e8f0fe;
+      --on-color:  #34a853;
+      --off-color: #ea4335;
+      --shadow:    0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+      --shadow-lg: 0 4px 16px rgba(0,0,0,.10);
+      --radius:    16px;
+      --transition: .25s cubic-bezier(.4,0,.2,1);
+    }
+    [data-theme="dark"] {
+      --bg:        #0f1117;
+      --surface:   #1e2027;
+      --surface2:  #282b33;
+      --border:    #3c4049;
+      --text:      #e8eaed;
+      --text-sub:  #9aa0a6;
+      --accent:    #8ab4f8;
+      --accent-bg: #1a2540;
+      --on-color:  #81c995;
+      --off-color: #f28b82;
+      --shadow:    0 1px 3px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+      --shadow-lg: 0 4px 20px rgba(0,0,0,.45);
+    }
+
+    /* ── Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    /* ── Topbar ───────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      transition: background var(--transition), border-color var(--transition);
+    }
+    .topbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .topbar-logo svg { color: var(--accent); }
+
+    /* ── Theme Toggle ─────────────────────────────────── */
+    .theme-btn {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background var(--transition), transform .15s;
+    }
+    .theme-btn:hover { background: var(--border); transform: scale(1.08); }
+
+    /* ── Layout ───────────────────────────────────────── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+
+    /* ── Card ─────────────────────────────────────────── */
+    .card-g {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+    }
+    .card-g:hover { box-shadow: var(--shadow-lg); }
+
+    /* ── Status Pill ──────────────────────────────────── */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all var(--transition);
+    }
+    .status-pill.on  { background: #e6f4ea; color: #2d7d46; }
+    .status-pill.off { background: #fce8e6; color: #b31412; }
+    [data-theme="dark"] .status-pill.on  { background: #1e3a2a; color: #81c995; }
+    [data-theme="dark"] .status-pill.off { background: #3b1a19; color: #f28b82; }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      transition: background var(--transition);
+    }
+    .status-pill.on  .status-dot { background: var(--on-color); animation: pulse 2s infinite; }
+    .status-pill.off .status-dot { background: var(--off-color); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+
+    /* ── Big Temp Display ─────────────────────────────── */
+    .temp-display {
+      font-family: 'DM Mono', monospace;
+      font-size: clamp(56px, 10vw, 88px);
+      font-weight: 400;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -2px;
+      transition: color var(--transition);
+    }
+    .temp-unit { font-size: .38em; color: var(--text-sub); }
+
+    /* ── Toggle Switch ────────────────────────────────── */
+    .toggle-switch { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+    .toggle-track {
+      width: 52px; height: 28px;
+      border-radius: 99px;
+      background: var(--border);
+      position: relative;
+      transition: background var(--transition);
+    }
+    .toggle-track.on { background: var(--accent); }
+    .toggle-thumb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 3px; left: 3px;
+      transition: transform var(--transition);
+      box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(24px); }
+    .toggle-label { font-size: 15px; font-weight: 500; }
+
+    /* ── Slider ───────────────────────────────────────── */
+    .temp-slider-wrap { width: 100%; padding: 8px 0; }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 99px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-bg);
+      cursor: pointer;
+      transition: transform .15s, background var(--transition);
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+    }
+
+    /* ── Slider ticks ─────────────────────────────────── */
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-sub);
+      font-family: 'DM Mono', monospace;
+      margin-top: 6px;
+    }
+
+    /* ── Chart ────────────────────────────────────────── */
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* ── Stat Chips ───────────────────────────────────── */
+    .stat-chip {
+      background: var(--surface2);
+      border-radius: 12px;
+      padding: 14px 18px;
+      transition: background var(--transition);
+    }
+    .stat-chip .val {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--accent);
+    }
+    .stat-chip .lbl { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+
+    /* ── Toast ────────────────────────────────────────── */
+    .toast-wrap {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999;
+    }
+    .toast-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 13px;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn .25s ease;
+      max-width: 280px;
+    }
+    .toast-item.error { border-left-color: var(--off-color); }
+    @keyframes slideIn {
+      from { transform: translateX(40px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    /* ── Skeleton ─────────────────────────────────────── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+      background-size: 200%;
+      animation: shimmer 1.6s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to   { background-position: -200% 0; }
+    }
+
+    /* ── Section Title ────────────────────────────────── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--text-sub);
+      margin-bottom: 16px;
+    }
+
+    /* ── Responsive tweaks ────────────────────────────── */
+    @media (max-width: 640px) {
+      .page { padding: 20px 16px 48px; }
+      .topbar { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Topbar ─────────────────────────────────────────────────── -->
+<header class="topbar">
+  <a href="#" class="topbar-logo">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+    </svg>
+    Thermostat
+  </a>
+
+  <div class="d-flex align-items-center gap-3">
+    <!-- Live indicator -->
+    <span class="d-none d-sm-flex align-items-center gap-2" style="font-size:13px; color: var(--text-sub);">
+      <span style="width:8px;height:8px;background:#34a853;border-radius:50%;display:inline-block;animation:pulse 2s infinite;"></span>
+      Live
+    </span>
+    <!-- Theme toggle -->
+    <button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
+      <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ── Page ───────────────────────────────────────────────────── -->
+<main class="page">
+
+  <!-- Row 1: Control + Stats -->
+  <div class="row g-4 mb-4">
+
+    <!-- Control Card -->
+    <div class="col-12 col-md-5">
+      <div class="card-g p-4 h-100">
+        <div class="d-flex justify-content-between align-items-start mb-4">
+          <div>
+            <p class="section-title mb-1">Living Room</p>
+            <span id="statusPill" class="status-pill on">
+              <span class="status-dot"></span>
+              <span id="statusText">Active</span>
+            </span>
+          </div>
+          <!-- Power toggle -->
+          <label class="toggle-switch" title="Power">
+            <div class="toggle-track on" id="toggleTrack">
+              <div class="toggle-thumb"></div>
+            </div>
+            <span class="toggle-label" id="toggleLabel">ON</span>
+          </label>
+        </div>
+
+        <!-- Big temperature -->
+        <div class="text-center my-4">
+          <div class="temp-display" id="tempDisplay">
+            --<span class="temp-unit">°C</span>
+          </div>
+          <p class="mt-2" style="font-size:13px; color:var(--text-sub);">Target temperature</p>
+        </div>
+
+        <!-- Slider -->
+        <div class="mt-4">
+          <div class="d-flex justify-content-between mb-2">
+            <span style="font-size:13px; color:var(--text-sub);">Temperature</span>
+            <span id="sliderVal" style="font-size:13px; font-family:'DM Mono',monospace; color:var(--accent);">21 °C</span>
+          </div>
+          <div class="temp-slider-wrap">
+            <input type="range" id="tempSlider" min="10" max="35" step="0.5" value="21" />
+          </div>
+          <div class="slider-labels">
+            <span>10°</span><span>15°</span><span>20°</span><span>25°</span><span>30°</span><span>35°</span>
+          </div>
+        </div>
+
+        <!-- Apply button -->
+        <button id="applyBtn" class="btn w-100 mt-4" style="background:var(--accent);color:#fff;border-radius:12px;font-weight:500;padding:10px;border:none;transition:opacity .2s;">
+          Apply Changes
+        </button>
+
+        <p id="updatedAt" class="text-center mt-3" style="font-size:11px;color:var(--text-sub);">Last updated: —</p>
+      </div>
+    </div>
+
+    <!-- Stats Column -->
+    <div class="col-12 col-md-7 d-flex flex-column gap-3">
+
+      <!-- Stat chips row -->
+      <div class="row g-3">
+        <div class="col-6 col-sm-3">
+          <div class="card-g stat-chip text-center">
+            <div class="val" id="statAvgTemp">—</div>
+            <div class="lbl">Avg Temp (7d)</div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-3">
+          <div class="card-g stat-chip text-center">
+            <div class="val" id="statUptime">—</div>
+            <div class="lbl">Uptime (7d)</div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-3">
+          <div class="card-g stat-chip text-center">
+            <div class="val" id="statMaxTemp">—</div>
+            <div class="lbl">Max Temp</div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-3">
+          <div class="card-g stat-chip text-center">
+            <div class="val" id="statMinTemp">—</div>
+            <div class="lbl">Min Temp</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity chart -->
+      <div class="card-g p-4 flex-grow-1">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="section-title mb-0">Activity — Last 7 Days</p>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm range-btn active-range" data-hours="24">24h</button>
+            <button class="btn btn-sm range-btn" data-hours="72">3d</button>
+            <button class="btn btn-sm range-btn" data-hours="168">7d</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="activityChart"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Row 2: On/Off timeline -->
+  <div class="card-g p-4">
+    <p class="section-title">Temperature Timeline</p>
+    <div style="height:160px; position:relative;">
+      <canvas id="timelineChart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Toast container ─────────────────────────────────────────── -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<style>
+  .range-btn {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-sub);
+    transition: all .15s;
+  }
+  .range-btn:hover, .range-btn.active-range {
+    background: var(--accent-bg);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+</style>
+
+<script>
+  /* ── Config ──────────────────────────────────────────────────── */
+  const API = "http://localhost:5000/api";   // ← change to your Flask URL if needed
+
+  /* ── State ───────────────────────────────────────────────────── */
+  let state        = { is_on: true, temperature: 21 };
+  let history      = [];
+  let activityChart, timelineChart;
+  let pendingTemp  = null;
+  let pendingOn    = null;
+  let isDark       = false;
+
+  /* ── Theme ───────────────────────────────────────────────────── */
+  const html       = document.documentElement;
+  const themeBtn   = document.getElementById("themeBtn");
+  const themeIcon  = document.getElementById("themeIcon");
+
+  const moonSVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+  const sunSVG  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+
+  const savedTheme = localStorage.getItem("theme");
+  if (savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme:dark)").matches)) {
+    setTheme(true);
+  }
+
+  themeBtn.addEventListener("click", () => setTheme(!isDark));
+
+  function setTheme(dark) {
+    isDark = dark;
+    html.setAttribute("data-theme", dark ? "dark" : "light");
+    themeIcon.innerHTML = dark ? sunSVG : moonSVG;
+    localStorage.setItem("theme", dark ? "dark" : "light");
+    updateChartTheme();
+  }
+
+  /* ── Helpers ─────────────────────────────────────────────────── */
+  function toast(msg, type = "info") {
+    const w = document.getElementById("toastWrap");
+    const t = document.createElement("div");
+    t.className = "toast-item" + (type === "error" ? " error" : "");
+    t.textContent = msg;
+    w.appendChild(t);
+    setTimeout(() => t.remove(), 3200);
+  }
+
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+  }
+
+  /* ── Render state ────────────────────────────────────────────── */
+  function renderState(s) {
+    state = s;
+    const isOn = s.is_on;
+
+    // Status pill
+    const pill = document.getElementById("statusPill");
+    pill.className = "status-pill " + (isOn ? "on" : "off");
+    document.getElementById("statusText").textContent = isOn ? "Active" : "Off";
+
+    // Toggle
+    const track = document.getElementById("toggleTrack");
+    track.className = "toggle-track " + (isOn ? "on" : "");
+    document.getElementById("toggleLabel").textContent = isOn ? "ON" : "OFF";
+    pendingOn = isOn;
+
+    // Temp display + slider
+    const t = s.temperature;
+    document.getElementById("tempDisplay").innerHTML = `${t.toFixed(1)}<span class="temp-unit">°C</span>`;
+    document.getElementById("tempSlider").value = t;
+    document.getElementById("sliderVal").textContent = `${t.toFixed(1)} °C`;
+    pendingTemp = t;
+
+    // Updated at
+    document.getElementById("updatedAt").textContent = "Last updated: " + fmtTime(s.updated_at);
+  }
+
+  /* ── Render stats ────────────────────────────────────────────── */
+  function renderStats(hist) {
+    if (!hist.length) return;
+    const onEntries = hist.filter(h => h.is_on);
+    const temps     = hist.map(h => h.temperature);
+    const avg       = temps.reduce((a,b) => a+b, 0) / temps.length;
+    const uptime    = Math.round(onEntries.length / hist.length * 100);
+
+    document.getElementById("statAvgTemp").textContent  = avg.toFixed(1) + "°";
+    document.getElementById("statUptime").textContent   = uptime + "%";
+    document.getElementById("statMaxTemp").textContent  = Math.max(...temps).toFixed(1) + "°";
+    document.getElementById("statMinTemp").textContent  = Math.min(...temps).toFixed(1) + "°";
+  }
+
+  /* ── Charts ──────────────────────────────────────────────────── */
+  function chartColors() {
+    return {
+      accent:   getComputedStyle(html).getPropertyValue("--accent").trim(),
+      grid:     getComputedStyle(html).getPropertyValue("--border").trim(),
+      text:     getComputedStyle(html).getPropertyValue("--text-sub").trim(),
+      onColor:  getComputedStyle(html).getPropertyValue("--on-color").trim(),
+      offColor: getComputedStyle(html).getPropertyValue("--off-color").trim(),
+      surface:  getComputedStyle(html).getPropertyValue("--surface").trim(),
+    };
+  }
+
+  function buildCharts(hist) {
+    const c = chartColors();
+
+    // ── Activity (temperature line) ──────────────────────────────
+    const actCtx = document.getElementById("activityChart").getContext("2d");
+
+    const gradient = actCtx.createLinearGradient(0, 0, 0, 240);
+    gradient.addColorStop(0, c.accent + "44");
+    gradient.addColorStop(1, c.accent + "00");
+
+    if (activityChart) activityChart.destroy();
+    activityChart = new Chart(actCtx, {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Temperature (°C)",
+          data: hist.map(h => ({ x: h.recorded_at, y: h.temperature })),
+          borderColor: c.accent,
+          backgroundColor: gradient,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          tension: 0.4,
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: getComputedStyle(html).getPropertyValue("--surface").trim(),
+            titleColor: getComputedStyle(html).getPropertyValue("--text").trim(),
+            bodyColor: c.text,
+            borderColor: c.grid,
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              title: items => fmtTime(items[0].raw.x),
+              label: item => `  ${item.raw.y.toFixed(1)} °C`,
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: "time",
+            time: { unit: "hour", displayFormats: { hour: "HH:mm", day: "MMM d" } },
+            grid: { color: c.grid + "55" },
+            ticks: { color: c.text, maxTicksLimit: 8, font: { family: "DM Mono", size: 11 } },
+          },
+          y: {
+            grid: { color: c.grid + "55" },
+            ticks: { color: c.text, font: { family: "DM Mono", size: 11 }, callback: v => v + "°" },
+          }
+        }
+      }
+    });
+
+    // ── Timeline (on/off bar) ────────────────────────────────────
+    const tlCtx = document.getElementById("timelineChart").getContext("2d");
+
+    if (timelineChart) timelineChart.destroy();
+    timelineChart = new Chart(tlCtx, {
+      type: "bar",
+      data: {
+        datasets: [{
+          label: "Active",
+          data: hist.map(h => ({ x: h.recorded_at, y: h.is_on ? 1 : 0 })),
+          backgroundColor: hist.map(h => h.is_on ? c.onColor + "bb" : c.offColor + "44"),
+          borderColor:     hist.map(h => h.is_on ? c.onColor : c.offColor + "66"),
+          borderWidth: 0,
+          borderRadius: 2,
+          barPercentage: 1,
+          categoryPercentage: 1,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => fmtTime(items[0].raw.x),
+              label: item => item.raw.y ? "  🟢 Active" : "  🔴 Off",
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: "time",
+            time: { unit: "hour", displayFormats: { hour: "HH:mm", day: "MMM d" } },
+            grid: { display: false },
+            ticks: { color: c.text, maxTicksLimit: 8, font: { family: "DM Mono", size: 11 } },
+          },
+          y: {
+            display: false,
+            min: 0, max: 1,
+          }
+        }
+      }
+    });
+  }
+
+  function updateChartTheme() {
+    if (!activityChart || !timelineChart) return;
+    const c = chartColors();
+
+    // Update activity chart
+    activityChart.data.datasets[0].borderColor = c.accent;
+    activityChart.options.scales.x.ticks.color = c.text;
+    activityChart.options.scales.y.ticks.color = c.text;
+    activityChart.options.scales.x.grid.color  = c.grid + "55";
+    activityChart.options.scales.y.grid.color  = c.grid + "55";
+    activityChart.update();
+
+    // Rebuild timeline with new colors
+    timelineChart.data.datasets[0].backgroundColor = history.map(h => h.is_on ? c.onColor + "bb" : c.offColor + "44");
+    timelineChart.data.datasets[0].borderColor      = history.map(h => h.is_on ? c.onColor : c.offColor + "66");
+    timelineChart.options.scales.x.ticks.color = c.text;
+    timelineChart.update();
+  }
+
+  /* ── Filter history by hours ────────────────────────────────── */
+  function filterHistory(hours) {
+    const cutoff = new Date(Date.now() - hours * 3600 * 1000);
+    return history.filter(h => new Date(h.recorded_at) >= cutoff);
+  }
+
+  /* ── API calls ───────────────────────────────────────────────── */
+  async function fetchState() {
+    try {
+      const r = await fetch(`${API}/state`);
+      if (!r.ok) throw new Error(r.statusText);
+      renderState(await r.json());
+    } catch (e) {
+      console.error("fetchState:", e);
+      // Fallback to demo state
+      renderState({ is_on: true, temperature: 21.0, updated_at: new Date().toISOString() });
+    }
+  }
+
+  async function fetchHistory(hours = 168) {
+    try {
+      const r = await fetch(`${API}/history?limit=500`);
+      if (!r.ok) throw new Error(r.statusText);
+      history = await r.json();
+    } catch (e) {
+      console.error("fetchHistory:", e);
+      history = generateDemoHistory();
+    }
+    renderStats(history);
+    buildCharts(filterHistory(hours));
+  }
+
+  async function pushState(payload) {
+    document.getElementById("applyBtn").disabled = true;
+    document.getElementById("applyBtn").textContent = "Saving…";
+    try {
+      const r = await fetch(`${API}/state`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(r.statusText);
+      const s = await r.json();
+      renderState(s);
+      toast("✅ Thermostat updated");
+    } catch (e) {
+      console.error("pushState:", e);
+      toast("⚠️ Could not reach backend — showing demo mode", "error");
+      // Simulate update locally for demo
+      renderState({ is_on: payload.is_on ?? state.is_on, temperature: payload.temperature ?? state.temperature, updated_at: new Date().toISOString() });
+    } finally {
+      document.getElementById("applyBtn").disabled = false;
+      document.getElementById("applyBtn").textContent = "Apply Changes";
+    }
+  }
+
+  /* ── Demo data (when API is unavailable) ─────────────────────── */
+  function generateDemoHistory() {
+    const data = [];
+    const now = Date.now();
+    for (let i = 168; i >= 0; i--) {
+      const ts   = new Date(now - i * 3600000).toISOString();
+      const hour = new Date(now - i * 3600000).getHours();
+      const on   = !(hour >= 23 || hour < 6);
+      data.push({
+        recorded_at: ts,
+        is_on:       on,
+        temperature: on ? +(18 + Math.random() * 6).toFixed(1) : +(14 + Math.random() * 3).toFixed(1),
+      });
+    }
+    return data;
+  }
+
+  /* ── Controls ────────────────────────────────────────────────── */
+  const slider = document.getElementById("tempSlider");
+  slider.addEventListener("input", e => {
+    pendingTemp = parseFloat(e.target.value);
+    document.getElementById("sliderVal").textContent = `${pendingTemp.toFixed(1)} °C`;
+    document.getElementById("tempDisplay").innerHTML = `${pendingTemp.toFixed(1)}<span class="temp-unit">°C</span>`;
+  });
+
+  document.getElementById("toggleTrack").addEventListener("click", function () {
+    pendingOn = !pendingOn;
+    this.className = "toggle-track " + (pendingOn ? "on" : "");
+    document.getElementById("toggleLabel").textContent = pendingOn ? "ON" : "OFF";
+
+    const pill = document.getElementById("statusPill");
+    pill.className = "status-pill " + (pendingOn ? "on" : "off");
+    document.getElementById("statusText").textContent = pendingOn ? "Active" : "Off";
+  });
+
+  document.getElementById("applyBtn").addEventListener("click", () => {
+    pushState({ is_on: pendingOn, temperature: pendingTemp });
+  });
+
+  // Range buttons
+  document.querySelectorAll(".range-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active-range"));
+      this.classList.add("active-range");
+      const h = parseInt(this.dataset.hours);
+      buildCharts(filterHistory(h));
+    });
+  });
+
+  /* ── Init + polling ──────────────────────────────────────────── */
+  async function init() {
+    await Promise.all([fetchState(), fetchHistory()]);
+  }
+
+  init();
+
+  // Auto-refresh every 30s
+  setInterval(fetchState, 30000);
+  setInterval(() => fetchHistory(), 60000);
+</script>
+
+</body>
+</html>
