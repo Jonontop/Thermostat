@@ -10,7 +10,7 @@ CORS(app)  # Allow frontend to call the API
 
 DB_PATH = "thermostat.db"
 
-# ─── Database Setup ────────────────────────────────────────────────────────────
+# Database Setup 
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -70,7 +70,7 @@ def init_db():
     db.close()
 
 
-# ─── Routes ────────────────────────────────────────────────────────────────────
+# Routes
 
 @app.route("/api/state", methods=["GET"])
 def get_state():
@@ -94,7 +94,8 @@ def update_state():
     current = db.execute("SELECT * FROM thermostat_state WHERE id = 1").fetchone()
     is_on   = int(data.get("is_on",       current["is_on"]))
     temp    = float(data.get("temperature", current["temperature"]))
-    temp    = max(10.0, min(35.0, temp))      # clamp to safe range
+    temp    = max(
+        10.0, min(35.0, temp))      # clamp to safe range
     now     = datetime.utcnow().isoformat()
 
     db.execute(
@@ -134,9 +135,9 @@ def get_history():
     return jsonify(history)
 
 
-# ─── Entry Point ───────────────────────────────────────────────────────────────
+# Entry Point
 
 if __name__ == "__main__":
     init_db()
-    print("✅  Thermostat API running at http://localhost:5000")
+    print(" Thermostat API running at http://localhost:5000")
     app.run(debug=True, port=5000)
