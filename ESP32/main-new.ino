@@ -11,20 +11,19 @@
 #define RELAY_PIN   5
 
 // ── WiFi credentials ───────────────────────────────────────────────
-const char* WIFI_SSID     = "Zlatko";
-const char* WIFI_PASSWORD = "GalAnzelak2012";
+const char* WIFI_SSID     = "SSID";
+const char* WIFI_PASSWORD = "Password";
 
 // ── Flask API base URL (no trailing slash) ─────────────────────────
 // Change to your server's IP/hostname if not running on localhost
-const char* API_BASE = "http://192.168.1.100:5000/api";  // <- update this
+const char* API_BASE = "http:/api.pecar.site/api/state";  // <- update this
 
 // ── Intervals (ms) ────────────────────────────────────────────────
-const unsigned long DHT_INTERVAL      = 5000;   // read sensor every 5 s
+const unsigned long DHT_INTERVAL      = 5000;   // interval branja senzorja
 const unsigned long API_PULL_INTERVAL = 10000;  // fetch target + power state every 10 s
 const unsigned long API_PUSH_INTERVAL = 10000;  // post temperature to API every 10 s
 
 // ── LCD 16x2 I2C ──────────────────────────────────────────────────
-// Address is usually 0x27 or 0x3F — check with I2C scanner if unsure
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // ── DHT sensor ────────────────────────────────────────────────────
