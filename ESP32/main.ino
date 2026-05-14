@@ -1,160 +1,187 @@
 #include <Wire.h>
 #include <WiFi.h>
-#include <SinricPro.h>
-#include <SinricProThermostat.h>
-#include <Adafruit_Sensor.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 #include <DHT.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// DHT Sensor Settings
-#define DHTPIN 15
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+// ── PINS ──
+#define DHTPIN       2
+#define RELAY_PIN     5
+#define SDA_PIN       8
+#define SCL_PIN       9
+#define ENC_L         1   
+#define ENC_R         0   
 
-// Relay Pin for thermostat control
-#define RELAY_PIN 5
-
-// WiFi credentials
+// ── CONFIG ──
 const char* ssid = "Zlatko";
-const char* password = "GalAnzelak2012";
+const char* pass = "GalAnzelak2012";
+const char* serverApi = "http://api.pecar.site/api/state";
 
-// Sinric Pro credentials
-const char* appKey = "2b6cb211-ad2a-493c-8587-9fa91dc8752e";
-const char* appSecret = "bc128207-7664-4af9-815b-12a88c8a6171-90930b6f-a4ab-4234-945a-5ef42cd7202c";
-const char* thermostatID = "672169545889569a22b4fea6";
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+DHT dht(DHTPIN, DHT11);
 
-// Temperature control variables
-float currentTemperature = 0.0;
-float thresholdTemperature = 22.0;
-bool relayState = false;
-String thermostatMode = "off"; // Modes: "cool", "heat", "off"
-float powerConsumption = 0.0;
-float powerRate = 0.1;
+// ── GLOBALS ──
+volatile float targetTemp = 22.0;
+volatile bool needsDisplayUpdate = true;
+volatile bool localChangeMade = false;
+volatile unsigned long lastTurnTime = 0;
 
-// OLED display settings
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+float currentTemp = 0.0;
+bool  relayState  = false;
+unsigned long lastDHTRead = 0;
+unsigned long lastAPISync = 0;
 
-// Sinric Pro thermostat
-SinricProThermostat& myThermostat = SinricPro[thermostatID];
+// ── ENCODER INTERRUPT ──
+void IRAM_ATTR readEncoder() {
+  unsigned long now = millis();
+  unsigned long timeDiff = now - lastTurnTime;
 
-// Sinric Pro power state callback
-bool onPowerState(const String& deviceId, bool& state) {
-    relayState = state && (thermostatMode != "off"); // Respect the mode setting
-    digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
-    Serial.printf("Power State set to: %s\n", state ? "ON" : "OFF");
-    return true;
-}
+  // 1. Debounce: ignore noise faster than 35ms
+  if (timeDiff > 35) { 
+    
+    // 2. Acceleration: Determine step size based on speed
+    float step = 0.5;
+    if (timeDiff < 75) {
+      step = 2.0; // Fast turn
+    } else if (timeDiff < 150) {
+      step = 1.0; // Moderate turn
+    }
 
-// Sinric Pro target temperature callback
-bool onTargetTemperature(const String& deviceId, float targetTemp) {
-    Serial.printf("Setting threshold temperature to: %.1f\n", targetTemp);
-    thresholdTemperature = targetTemp;
-    updateRelayState();
-    return true;
-}
-
-// Sinric Pro thermostat mode callback
-bool onThermostatMode(const String& deviceId, String mode) {
-    Serial.printf("Setting thermostat mode to: %s\n", mode.c_str());
-    thermostatMode = mode;
-    updateRelayState(); // Update relay based on the mode
-    myThermostat.sendThermostatModeEvent(thermostatMode);
-    return true;
-}
-
-// Update relay state based on mode and threshold
-void updateRelayState() {
-    bool previousState = relayState;
-
-    if (thermostatMode == "heat" && currentTemperature < thresholdTemperature) {
-        relayState = true;
-    } else if (thermostatMode == "cool" && currentTemperature > thresholdTemperature) {
-        relayState = true;
+    // 3. Directional Logic (Inverted per your setup)
+    if (digitalRead(ENC_R) == digitalRead(ENC_L)) {
+      if (targetTemp + step <= 30.0) targetTemp += step;
+      else targetTemp = 30.0;
     } else {
-        relayState = false;
+      if (targetTemp - step >= 5.0) targetTemp -= step;
+      else targetTemp = 5.0;
     }
 
-    digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
-
-    static unsigned long lastUpdate = millis();
-    unsigned long currentTime = millis();
-    if (relayState) {
-        powerConsumption += powerRate * ((currentTime - lastUpdate) / 3600000.0);
-    }
-    lastUpdate = currentTime;
-
-    if (relayState != previousState) {
-        myThermostat.sendPowerStateEvent(relayState);
-    }
-}
-
-// Read temperature, update display, and send data to Sinric Pro
-void updateTemperature() {
-    float temp = dht.readTemperature();
-    if (!isnan(temp)) {
-        currentTemperature = temp;
-        myThermostat.sendTemperatureEvent(currentTemperature);
-
-        updateRelayState(); // Update relay based on new temperature and mode
-
-        display.clearDisplay();
-        display.setCursor(0, 0);
-        display.println("Current Temp:");
-        display.setCursor(0, 10);
-        display.print(currentTemperature);
-        display.println(" C");
-        display.setCursor(0, 30);
-        display.println("Threshold Temp:");
-        display.setCursor(0, 40);
-        display.print(thresholdTemperature);
-        display.println(" C");
-        display.setCursor(0, 50);
-        display.print("Mode: ");
-        display.print(thermostatMode);
-        display.display();
-
-        Serial.printf("Current Temperature: %.1f, Power Consumption: %.2f kWh\n", currentTemperature, powerConsumption);
-    }
+    // 4. Update State
+    lastTurnTime = now;
+    needsDisplayUpdate = true;
+    localChangeMade = true; // Signals ESP32 to sync with Flask
+  }
 }
 
 void setup() {
-    Serial.begin(115200);
-    WiFi.begin(ssid, password);
+  Serial.begin(115200);
+  
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
+  
+  pinMode(ENC_L, INPUT_PULLUP);
+  pinMode(ENC_R, INPUT_PULLUP);
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Connecting to WiFi...");
-    }
-    Serial.println("WiFi connected");
-
-    dht.begin();
-    pinMode(RELAY_PIN, OUTPUT);
-    digitalWrite(RELAY_PIN, LOW);
-
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-        Serial.println(F("SSD1306 allocation failed"));
-        while (true);
-    }
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-
-    myThermostat.onPowerState(onPowerState);
-    myThermostat.onTargetTemperature(onTargetTemperature);
-    myThermostat.onThermostatMode(onThermostatMode); // Set mode callback
-
-    SinricPro.begin(appKey, appSecret);
+  Wire.begin(SDA_PIN, SCL_PIN);
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED Failed");
+  }
+  
+  dht.begin();
+  attachInterrupt(digitalPinToInterrupt(ENC_L), readEncoder, FALLING);
+  
+  WiFi.begin(ssid, pass);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
 }
 
 void loop() {
-    SinricPro.handle();
+  unsigned long now = millis();
 
-    static unsigned long lastTempUpdate = 0;
-    if (millis() - lastTempUpdate > 5000) {
-        lastTempUpdate = millis();
-        updateTemperature();
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  // 1. Refresh Display
+  if (needsDisplayUpdate) {
+    needsDisplayUpdate = false;
+    updateDisplay();
+  }
+
+  // 2. Sensor & Hysteresis Logic (3s)
+  if (now - lastDHTRead >= 3000) {
+    lastDHTRead = now;
+    float t = dht.readTemperature();
+    if (!isnan(t)) {
+      currentTemp = t;
+      if (currentTemp < (targetTemp - 0.3)) relayState = true;
+      else if (currentTemp > (targetTemp + 0.3)) relayState = false;
+      digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
+      needsDisplayUpdate = true;
     }
+  }
+
+  // 3. API Sync (10s)
+  if (now - lastAPISync >= 10000) {
+    lastAPISync = now;
+    syncWithAPI();
+  }
+}
+
+void syncWithAPI() {
+  HTTPClient http;
+  http.begin(serverApi);
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<200> doc;
+  doc["temperature"] = currentTemp;
+  doc["target"] = targetTemp; // Server looks for 'target' from ESP
+  doc["relay_on"] = relayState;
+
+  String jsonStr;
+  serializeJson(doc, jsonStr);
+
+  int httpCode;
+  if (localChangeMade) {
+    httpCode = http.POST(jsonStr); // Push our new knob value
+    if (httpCode == 200) localChangeMade = false; 
+    Serial.println("POST: Sent knob change");
+  } else {
+    httpCode = http.GET(); // Just get updates from web
+  }
+
+  if (httpCode == 200) {
+    String payload = http.getString();
+    StaticJsonDocument<200> response;
+    deserializeJson(response, payload);
+    
+    // Update local target from DB (unless we are currently turning the knob)
+    if (!localChangeMade && response.containsKey("target_temp")) {
+        float webTarget = response["target_temp"];
+        if (abs(webTarget - targetTemp) > 0.1) {
+            targetTemp = webTarget;
+            needsDisplayUpdate = true;
+            Serial.println("Sync: Applied web change to local");
+        }
+    }
+  }
+  http.end();
+}
+
+void updateDisplay() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  //display.setTextSize(1);
+  //display.setCursor(0,0);
+  //display.print("SMART THERMOSTAT");
+  
+  display.setCursor(0, 2);
+  display.setTextSize(2);
+  display.print("NOW:"); display.print(currentTemp, 1); display.print("C");
+  
+  display.setCursor(0, 42);
+  display.print("SET:"); display.print(targetTemp, 1); display.print("C");
+  
+  if (relayState) {
+    display.fillRect(95, 45, 30, 15, SSD1306_WHITE);
+    display.setTextColor(SSD1306_BLACK);
+    display.setCursor(98, 49);
+    display.setTextSize(1);
+    display.print("ON");
+  }
+  display.display();
 }
