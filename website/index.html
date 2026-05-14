@@ -521,22 +521,30 @@
     document.getElementById("toggleLabel").textContent = isOn ? "ON" : "OFF";
     pendingOn = isOn;
 
-    // Temp display + slider
-    const t = s.temperature;
-    document.getElementById("tempDisplay").innerHTML = `${t.toFixed(1)}<span class="temp-unit">°C</span>`;
-    document.getElementById("tempSlider").value = t;
-    document.getElementById("sliderVal").textContent = `${t.toFixed(1)} °C`;
-    pendingTemp = t;
+    // USE THE NEW NAMES HERE:
+    const target = s.target_temp; 
+    const current = s.current_temp;
+
+    // Big display shows Target, small stat shows Current
+    document.getElementById("tempDisplay").innerHTML = `${target.toFixed(1)}<span class="temp-unit">°C</span>`;
+    document.getElementById("tempSlider").value = target;
+    document.getElementById("sliderVal").textContent = `${target.toFixed(1)} °C`;
+    
+    // Update the Stat Chip for current temp
+    const currentStat = document.getElementById("statAvgTemp"); // You can repurpose this or add a new one
+    if(currentStat) currentStat.textContent = current.toFixed(1) + "°";
+
+    pendingTemp = target;
 
     // Updated at
     document.getElementById("updatedAt").textContent = "Last updated: " + fmtTime(s.updated_at);
-  }
+}
 
   /* ── Render stats ────────────────────────────────────────────── */
   function renderStats(hist) {
     if (!hist.length) return;
     const onEntries = hist.filter(h => h.is_on);
-    const temps     = hist.map(h => h.temperature);
+    const temps = hist.map(h => h.current_temp);
     const avg       = temps.reduce((a,b) => a+b, 0) / temps.length;
     const uptime    = Math.round(onEntries.length / hist.length * 100);
 
@@ -574,7 +582,7 @@
       data: {
         datasets: [{
           label: "Temperature (°C)",
-          data: hist.map(h => ({ x: h.recorded_at, y: h.temperature })),
+          data: hist.map(h => ({ x: h.recorded_at, y: h.current_temp })), // Use current_temp
           borderColor: c.accent,
           backgroundColor: gradient,
           borderWidth: 2,
@@ -718,26 +726,31 @@
   async function pushState(payload) {
     document.getElementById("applyBtn").disabled = true;
     document.getElementById("applyBtn").textContent = "Saving…";
+    
+    // Convert 'temperature' to 'target_temp' for the API
+    const apiPayload = {
+        is_on: payload.is_on,
+        target_temp: payload.temperature 
+    };
+
     try {
-      const r = await fetch(`${API}/state`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) throw new Error(r.statusText);
-      const s = await r.json();
-      renderState(s);
-      toast("✅ Thermostat updated");
+        const r = await fetch(`${API}/state`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(apiPayload),
+        });
+        if (!r.ok) throw new Error(r.statusText);
+        const s = await r.json();
+        renderState(s);
+        toast("✅ Thermostat updated");
     } catch (e) {
-      console.error("pushState:", e);
-      toast("⚠️ Could not reach backend — showing demo mode", "error");
-      // Simulate update locally for demo
-      renderState({ is_on: payload.is_on ?? state.is_on, temperature: payload.temperature ?? state.temperature, updated_at: new Date().toISOString() });
+        console.error("pushState:", e);
+        toast("⚠️ Connection Error", "error");
     } finally {
-      document.getElementById("applyBtn").disabled = false;
-      document.getElementById("applyBtn").textContent = "Apply Changes";
+        document.getElementById("applyBtn").disabled = false;
+        document.getElementById("applyBtn").textContent = "Apply Changes";
     }
-  }
+}
 
   /* ── Demo data (when API is unavailable) ─────────────────────── */
   function generateDemoHistory() {
