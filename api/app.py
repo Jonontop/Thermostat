@@ -1,16 +1,12 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sqlite3
-import os
-from datetime import datetime, timedelta
-import random
+from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # Allow frontend to call the API
+CORS(app)
 
 DB_PATH = "thermostat.db"
-
-# Database Setup 
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -18,126 +14,101 @@ def get_db():
     return conn
 
 def init_db():
-    """Create tables and seed demo data if the database doesn't exist."""
     db = get_db()
-    cursor = db.cursor()
-
-    cursor.execute("""
+    db.execute("""
         CREATE TABLE IF NOT EXISTS thermostat_state (
-            id          INTEGER PRIMARY KEY,
-            is_on       INTEGER NOT NULL DEFAULT 1,
-            temperature REAL    NOT NULL DEFAULT 21.0,
-            updated_at  TEXT    NOT NULL
+            id INTEGER PRIMARY KEY,
+            is_on INTEGER DEFAULT 1,
+            current_temp REAL DEFAULT 21.0,
+            target_temp REAL DEFAULT 22.0,
+            updated_at TEXT
         )
     """)
-
-    cursor.execute("""
+    db.execute("""
         CREATE TABLE IF NOT EXISTS thermostat_log (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            is_on       INTEGER NOT NULL,
-            temperature REAL    NOT NULL,
-            recorded_at TEXT    NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            is_on INTEGER,
+            current_temp REAL,
+            target_temp REAL,
+            recorded_at TEXT
         )
     """)
-
-    # Seed initial state if empty
-    cursor.execute("SELECT COUNT(*) FROM thermostat_state")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute(
-            "INSERT INTO thermostat_state (id, is_on, temperature, updated_at) VALUES (1, 1, 21.0, ?)",
-            (datetime.utcnow().isoformat(),)
-        )
-
-    # Seed 7 days of demo history if empty
-    cursor.execute("SELECT COUNT(*) FROM thermostat_log")
-    if cursor.fetchone()[0] == 0:
-        now = datetime.utcnow()
-        entries = []
-        for hours_ago in range(168, 0, -1):   # 7 days × 24 hours
-            ts = now - timedelta(hours=hours_ago)
-            hour = ts.hour
-            # Simulate realistic on/off pattern: off at night (23–6), on during day
-            is_on = 0 if 23 <= hour or hour < 6 else 1
-            temp = round(random.uniform(19.0, 24.0) if is_on else random.uniform(15.0, 18.0), 1)
-            entries.append((is_on, temp, ts.isoformat()))
-
-        cursor.executemany(
-            "INSERT INTO thermostat_log (is_on, temperature, recorded_at) VALUES (?, ?, ?)",
-            entries
-        )
-
+    if db.execute("SELECT COUNT(*) FROM thermostat_state").fetchone()[0] == 0:
+        db.execute("INSERT INTO thermostat_state (id, is_on, current_temp, target_temp, updated_at) VALUES (1, 1, 21.0, 22.0, ?)", (datetime.utcnow().isoformat(),))
     db.commit()
     db.close()
-
-
-# Routes
 
 @app.route("/api/state", methods=["GET"])
 def get_state():
-    """Return current thermostat state."""
     db = get_db()
     row = db.execute("SELECT * FROM thermostat_state WHERE id = 1").fetchone()
     db.close()
-    return jsonify({
-        "is_on":       bool(row["is_on"]),
-        "temperature": row["temperature"],
-        "updated_at":  row["updated_at"],
-    })
-
+    return jsonify(dict(row))
 
 @app.route("/api/state", methods=["POST"])
 def update_state():
-    """Update thermostat state (is_on and/or temperature)."""
     data = request.get_json(force=True)
-    db   = get_db()
+    db = get_db()
+    row = db.execute("SELECT * FROM thermostat_state WHERE id = 1").fetchone()
+    
+    db_target = float(row["target_temp"])
+    db_is_on = int(row["is_on"])
 
-    current = db.execute("SELECT * FROM thermostat_state WHERE id = 1").fetchone()
-    is_on   = int(data.get("is_on",       current["is_on"]))
-    temp    = float(data.get("temperature", current["temperature"]))
-    temp    = max(
-        10.0, min(35.0, temp))      # clamp to safe range
-    now     = datetime.utcnow().isoformat()
+    # 1. Determine Target Temp
+    if "target_temp" in data: # Request from WEB
+        final_target = float(data["target_temp"])
+    elif "target" in data: # Request from ESP32
+        esp_val = float(data["target"])
+        # If ESP value differs significantly from DB, the Knob was turned
+        final_target = esp_val if abs(esp_val - db_target) > 0.1 else db_target
+    else:
+        final_target = db_target
 
-    db.execute(
-        "UPDATE thermostat_state SET is_on = ?, temperature = ?, updated_at = ? WHERE id = 1",
-        (is_on, temp, now)
-    )
-    # Log the change
-    db.execute(
-        "INSERT INTO thermostat_log (is_on, temperature, recorded_at) VALUES (?, ?, ?)",
-        (is_on, temp, now)
-    )
+    # 2. Get Actual Temp (ESP only)
+    final_actual = data.get("temperature", row["current_temp"])
+
+    # 3. Determine Power
+    if "is_on" in data:
+        final_is_on = 1 if data["is_on"] else 0
+    elif "relay_on" in data:
+        final_is_on = 1 if data["relay_on"] else 0
+    else:
+        final_is_on = db_is_on
+
+    now = datetime.utcnow().isoformat()
+    db.execute("UPDATE thermostat_state SET is_on=?, current_temp=?, target_temp=?, updated_at=? WHERE id=1",
+               (final_is_on, final_actual, final_target, now))
+    db.execute("INSERT INTO thermostat_log (is_on, current_temp, target_temp, recorded_at) VALUES (?, ?, ?, ?)",
+               (final_is_on, final_actual, final_target, now))
     db.commit()
     db.close()
 
-    return jsonify({"is_on": bool(is_on), "temperature": temp, "updated_at": now})
-
+    return jsonify({"status": "success", "target_temp": final_target, "is_on": bool(final_is_on)})
 
 @app.route("/api/history", methods=["GET"])
 def get_history():
     """Return last N log entries (default 168 = 7 days hourly)."""
     limit = request.args.get("limit", 168, type=int)
     db    = get_db()
+    
+    # Changed 'temperature' to 'current_temp' to match your database columns
     rows  = db.execute(
-        "SELECT is_on, temperature, recorded_at FROM thermostat_log ORDER BY recorded_at DESC LIMIT ?",
+        "SELECT is_on, current_temp, recorded_at FROM thermostat_log ORDER BY recorded_at DESC LIMIT ?",
         (limit,)
     ).fetchall()
     db.close()
 
     history = [
         {
-            "is_on":       bool(r["is_on"]),
-            "temperature": r["temperature"],
-            "recorded_at": r["recorded_at"],
+            "is_on":        bool(r["is_on"]),
+            "current_temp": r["current_temp"],
+            "recorded_at":  r["recorded_at"],
         }
         for r in reversed(rows)
     ]
     return jsonify(history)
 
 
-# Entry Point
-
 if __name__ == "__main__":
     init_db()
-    print(" Thermostat API running at http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, host="0.0.0.0")
